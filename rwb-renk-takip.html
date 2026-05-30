@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RWB Thrift — Renk Etiketi Takibi</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#e2e8f0; --muted:#94a3b8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:linear-gradient(160deg,#0b1220,#0f172a);color:var(--txt);min-height:100vh;padding:24px;}
+  .wrap{max-width:720px;margin:0 auto;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:20px;}
+  .datebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;
+    background:var(--card);border:1px solid var(--line);padding:12px 14px;border-radius:12px;}
+  .datebar label{font-size:13px;color:var(--muted);}
+  input[type=date]{background:#0b1220;color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:7px 10px;font-size:14px;}
+  button{background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;}
+  button.ghost{background:#334155;}
+  .periodline{font-size:14px;color:var(--muted);margin-bottom:16px;}
+  .periodline b{color:var(--txt);}
+  .grid{display:grid;grid-template-columns:1fr;gap:10px;}
+  .row{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:12px 16px;}
+  .sw{width:34px;height:34px;border-radius:8px;flex:0 0 auto;border:2px solid rgba(255,255,255,.25);}
+  .name{font-size:16px;font-weight:600;flex:1;}
+  .name .tr{display:block;font-size:12px;color:var(--muted);font-weight:400;}
+  .badge{font-size:14px;font-weight:700;padding:6px 12px;border-radius:999px;white-space:nowrap;}
+  .b-new{background:#facc15;color:#1a1a1a;}
+  .b-full{background:#334155;color:#cbd5e1;}
+  .b-50{background:#fb923c;color:#1a1a1a;}
+  .b-75{background:#ef4444;color:#fff;}
+  .next{margin-top:18px;background:#0b1220;border:1px dashed var(--line);border-radius:12px;
+    padding:14px 16px;font-size:14px;color:var(--muted);}
+  .next b{color:var(--txt);}
+  .legend{margin-top:16px;font-size:12px;color:var(--muted);line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏷️ RWB Thrift — Renk Etiketi Takibi</h1>
+  <div class="sub">Renkler her <b>Çarşamba</b> ve <b>Pazar</b> değişir. Aşağısı seçili güne göre otomatik hesaplanır.</div>
+
+  <div class="datebar">
+    <label>Tarih:</label>
+    <input type="date" id="dt">
+    <button class="ghost" id="today">Bugün</button>
+  </div>
+
+  <div class="periodline" id="period"></div>
+  <div class="grid" id="grid"></div>
+  <div class="next" id="next"></div>
+
+  <div class="legend">
+    <b>Nasıl çalışır:</b> Her renk 6 dönem yaşar → 3 dönem tam fiyat, sonra 2 dönem %50, son dönem %75 (son şans), sonra etiketler kalkar ve renk baştan "yeni" olarak geri döner.<br>
+    Sıra: 🔴 Kırmızı → 🔵 Mavi → 🟢 Yeşil → 🟡 Sarı → 🍑 Şeftali → ⚪ Beyaz → (tekrar)
+  </div>
+</div>
+
+<script>
+const ORDER = ["Red","Blue","Green","Yellow","Peach","White"];
+const TR    = {Red:"Kırmızı",Blue:"Mavi",Green:"Yeşil",Yellow:"Sarı",Peach:"Şeftali",White:"Beyaz"};
+const HEX   = {Red:"#dc2626",Blue:"#2563eb",Green:"#16a34a",Yellow:"#eab308",Peach:"#fdba74",White:"#f8fafc"};
+const EMOJI = {Red:"🔴",Blue:"🔵",Green:"🟢",Yellow:"🟡",Peach:"🍑",White:"⚪"};
+
+const DAY = 86400000;
+const ANCHOR = Date.UTC(2026,4,27);   // May 27 2026 -> White new
+const ANCHOR_IDX = 5;
+
+function mkUTC(d){ return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()); }
+function wd(ms){ return new Date(ms).getUTCDay(); }            // Sun=0 .. Wed=3
+function isBoundary(ms){ return wd(ms)===0 || wd(ms)===3; }
+function periodStart(ms){ let t=ms; while(!isBoundary(t)) t-=DAY; return t; }
+function nextBoundary(ms){ let t=ms+DAY; while(!isBoundary(t)) t+=DAY; return t; }
+
+function periodCounter(ms){
+  const epoch = periodStart(Date.UTC(2025,0,1));
+  const ps = periodStart(ms);
+  let c=0, t=epoch;
+  while(t<=ps){ c++; t=nextBoundary(t); }
+  return c;
+}
+const BASE = periodCounter(ANCHOR);
+
+function statusFor(ms){
+  const newIdx = ((ANCHOR_IDX + (periodCounter(ms)-BASE)) % 6 + 6) % 6;
+  const list = ORDER.map((c,i)=>{
+    const age = ((newIdx - i) % 6 + 6) % 6;
+    let kind;
+    if(age===0) kind="new";
+    else if(age<=2) kind="full";
+    else if(age<=4) kind="50";
+    else kind="75";
+    return {color:c, age, kind};
+  });
+  return {newIdx, list};
+}
+
+const fmt = ms => new Date(ms).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"});
+const fmtShort = ms => new Date(ms).toLocaleDateString("tr-TR",{day:"numeric",month:"long",timeZone:"UTC"});
+
+function badge(kind){
+  if(kind==="new")  return '<span class="badge b-new">🆕 YENİ · tam fiyat</span>';
+  if(kind==="full") return '<span class="badge b-full">Tam fiyat</span>';
+  if(kind==="50")   return '<span class="badge b-50">%50 indirim</span>';
+  return '<span class="badge b-75">%75 · son şans</span>';
+}
+
+function render(ms){
+  const ps = periodStart(ms);
+  const pe = nextBoundary(ms) - DAY;
+  const {list} = statusFor(ms);
+  // order: new first, then by age
+  const sorted = [...list].sort((a,b)=>a.age-b.age);
+
+  document.getElementById("period").innerHTML =
+    `Dönem: <b>${fmtShort(ps)} – ${fmtShort(pe)}</b> &nbsp;·&nbsp; Sıradaki değişim: <b>${fmt(nextBoundary(ms))}</b>`;
+
+  document.getElementById("grid").innerHTML = sorted.map(it=>`
+    <div class="row">
+      <div class="sw" style="background:${HEX[it.color]}"></div>
+      <div class="name">${EMOJI[it.color]} ${TR[it.color]}<span class="tr">${it.color}</span></div>
+      ${badge(it.kind)}
+    </div>`).join("");
+
+  // next period preview
+  const nb = nextBoundary(ms);
+  const {newIdx:nn} = statusFor(nb);
+  document.getElementById("next").innerHTML =
+    `➡️ <b>${fmt(nb)}</b> günü yeni renk: <b>${EMOJI[ORDER[nn]]} ${TR[ORDER[nn]]}</b> olacak.`;
+}
+
+const dt = document.getElementById("dt");
+function setDate(ms){
+  const d = new Date(ms);
+  dt.value = d.toISOString().slice(0,10);
+  render(ms);
+}
+dt.addEventListener("change", ()=>{
+  const [y,m,d] = dt.value.split("-").map(Number);
+  render(Date.UTC(y,m-1,d));
+});
+document.getElementById("today").addEventListener("click", ()=> setDate(mkUTC(new Date())));
+
+setDate(mkUTC(new Date()));
+</script>
+</body>
+</html>
