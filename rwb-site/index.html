@@ -37,6 +37,7 @@
   .badge{font-size:12.5px;font-weight:700;padding:6px 10px;border-radius:999px;white-space:nowrap;}
   .b-new{background:#facc15;color:#1a1a1a;}
   .b-full{background:#334155;color:#cbd5e1;}
+  .b-25{background:#60a5fa;color:#0a1a2e;}
   .b-50{background:#fb923c;color:#1a1a1a;}
   .b-75{background:#ef4444;color:#fff;}
   .next{margin-top:16px;background:#0b1220;border:1px dashed var(--line);border-radius:12px;
@@ -49,33 +50,27 @@
 <div class="wrap">
   <h1>🏷️ RWB Renk Takibi</h1>
   <div class="sub">Renkler her <b>Çarşamba</b> ve <b>Pazar</b> değişir. Aşağısı seçili güne göre otomatik hesaplanır.</div>
-
   <div class="datebar">
     <label>Tarih:</label>
     <input type="date" id="dt">
     <button id="today">Bugün</button>
   </div>
-
   <div class="periodline" id="period"></div>
   <div class="grid" id="grid"></div>
   <div class="next" id="next"></div>
-
   <div class="legend">
-    <b>Nasıl çalışır:</b> Her renk 6 dönem yaşar → 3 dönem tam fiyat, sonra 2 dönem %50, son dönem %75 (son şans), sonra etiketler kalkar ve renk baştan "yeni" olarak geri döner.<br>
+    <b>Nasıl çalışır:</b> Her renk 6 dönem yaşar → dönem 1-2 tam fiyat, dönem 3 <span style="color:#60a5fa">%25</span>, dönem 4-5 <span style="color:#fb923c">%50</span>, dönem 6 <span style="color:#ef4444">%75 son şans</span>, sonra etiketler kalkar ve renk baştan "yeni" olarak geri döner.<br>
     Sıra: 🔴 Kırmızı → 🔵 Mavi → 🟢 Yeşil → 🟡 Sarı → 🍑 Şeftali → ⚪ Beyaz → (tekrar)
   </div>
 </div>
-
 <script>
 const ORDER = ["Red","Blue","Green","Yellow","Peach","White"];
 const TR    = {Red:"Kırmızı",Blue:"Mavi",Green:"Yeşil",Yellow:"Sarı",Peach:"Şeftali",White:"Beyaz"};
 const HEX   = {Red:"#dc2626",Blue:"#2563eb",Green:"#16a34a",Yellow:"#eab308",Peach:"#fdba74",White:"#f8fafc"};
 const EMOJI = {Red:"🔴",Blue:"🔵",Green:"🟢",Yellow:"🟡",Peach:"🍑",White:"⚪"};
-
 const DAY = 86400000;
-const ANCHOR = Date.UTC(2026,4,27);   // 27 May 2026 -> White new
+const ANCHOR = Date.UTC(2026,4,27);
 const ANCHOR_IDX = 5;
-
 const mkUTC = d => Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
 const wd = ms => new Date(ms).getUTCDay();
 const isBoundary = ms => wd(ms)===0 || wd(ms)===3;
@@ -91,7 +86,12 @@ function statusFor(ms){
   const newIdx = ((ANCHOR_IDX + (periodCounter(ms)-BASE)) % 6 + 6) % 6;
   const list = ORDER.map((c,i)=>{
     const age = ((newIdx - i) % 6 + 6) % 6;
-    let kind = age===0 ? "new" : age<=2 ? "full" : age<=4 ? "50" : "75";
+    let kind;
+    if      (age === 0) kind = "new";
+    else if (age === 1) kind = "full";
+    else if (age === 2) kind = "25";
+    else if (age <= 4)  kind = "50";
+    else                kind = "75";
     return {color:c, age, kind};
   });
   return {newIdx, list};
@@ -101,6 +101,7 @@ const fmtShort = ms => new Date(ms).toLocaleDateString("tr-TR",{day:"numeric",mo
 function badge(kind){
   if(kind==="new")  return '<span class="badge b-new">🆕 YENİ · tam fiyat</span>';
   if(kind==="full") return '<span class="badge b-full">Tam fiyat</span>';
+  if(kind==="25")   return '<span class="badge b-25">%25 indirim</span>';
   if(kind==="50")   return '<span class="badge b-50">%50 indirim</span>';
   return '<span class="badge b-75">%75 · son şans</span>';
 }
@@ -129,7 +130,6 @@ dt.addEventListener("change", ()=>{
 });
 document.getElementById("today").addEventListener("click", ()=> setDate(mkUTC(new Date())));
 setDate(mkUTC(new Date()));
-
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
