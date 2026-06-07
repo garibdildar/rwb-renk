@@ -1,1 +1,138 @@
-<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=./rwb-site/">
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>RWB Renk Takibi</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RWB Renk">
+<style>
+  :root{ --card:#1e293b; --line:#334155; --txt:#e2e8f0; --muted:#94a3b8; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:linear-gradient(160deg,#0b1220,#0f172a);color:var(--txt);min-height:100vh;
+    padding:max(18px,env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));}
+  .wrap{max-width:560px;margin:0 auto;}
+  h1{font-size:20px;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;line-height:1.5;}
+  .datebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;
+    background:var(--card);border:1px solid var(--line);padding:10px 12px;border-radius:12px;}
+  .datebar label{font-size:13px;color:var(--muted);}
+  input[type=date]{background:#0b1220;color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:15px;flex:1;min-width:120px;}
+  button{background:#334155;color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;}
+  .periodline{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6;}
+  .periodline b{color:var(--txt);}
+  .grid{display:grid;grid-template-columns:1fr;gap:9px;}
+  .row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:11px 14px;}
+  .row.isnew{border-color:#facc15;box-shadow:0 0 0 1px #facc1533;}
+  .sw{width:30px;height:30px;border-radius:7px;flex:0 0 auto;border:2px solid rgba(255,255,255,.25);}
+  .name{font-size:15px;font-weight:600;flex:1;}
+  .name .en{display:block;font-size:11px;color:var(--muted);font-weight:400;}
+  .badge{font-size:12.5px;font-weight:700;padding:6px 10px;border-radius:999px;white-space:nowrap;}
+  .b-new{background:#facc15;color:#1a1a1a;}
+  .b-full{background:#334155;color:#cbd5e1;}
+  .b-25{background:#60a5fa;color:#0a1a2e;}
+  .b-50{background:#fb923c;color:#1a1a1a;}
+  .b-75{background:#ef4444;color:#fff;}
+  .next{margin-top:16px;background:#0b1220;border:1px dashed var(--line);border-radius:12px;
+    padding:13px 15px;font-size:13.5px;color:var(--muted);line-height:1.55;}
+  .next b{color:var(--txt);}
+  .legend{margin-top:16px;font-size:11.5px;color:var(--muted);line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏷️ RWB Renk Takibi</h1>
+  <div class="sub">Renkler her <b>Çarşamba</b> ve <b>Pazar</b> değişir. Aşağısı seçili güne göre otomatik hesaplanır.</div>
+  <div class="datebar">
+    <label>Tarih:</label>
+    <input type="date" id="dt">
+    <button id="today">Bugün</button>
+  </div>
+  <div class="periodline" id="period"></div>
+  <div class="grid" id="grid"></div>
+  <div class="next" id="next"></div>
+  <div class="legend">
+    <b>Nasıl çalışır:</b> Her renk 6 dönem yaşar → dönem 1-2 tam fiyat, dönem 3 <span style="color:#60a5fa">%25</span>, dönem 4-5 <span style="color:#fb923c">%50</span>, dönem 6 <span style="color:#ef4444">%75 son şans</span>, sonra etiketler kalkar ve renk baştan "yeni" olarak geri döner.<br>
+    Sıra: 🔴 Kırmızı → 🔵 Mavi → 🟢 Yeşil → 🟡 Sarı → 🍑 Şeftali → ⚪ Beyaz → (tekrar)
+  </div>
+</div>
+<script>
+const ORDER = ["Red","Blue","Green","Yellow","Peach","White"];
+const TR    = {Red:"Kırmızı",Blue:"Mavi",Green:"Yeşil",Yellow:"Sarı",Peach:"Şeftali",White:"Beyaz"};
+const HEX   = {Red:"#dc2626",Blue:"#2563eb",Green:"#16a34a",Yellow:"#eab308",Peach:"#fdba74",White:"#f8fafc"};
+const EMOJI = {Red:"🔴",Blue:"🔵",Green:"🟢",Yellow:"🟡",Peach:"🍑",White:"⚪"};
+const DAY = 86400000;
+const ANCHOR = Date.UTC(2026,4,27);   // 27 May 2026 -> White new
+const ANCHOR_IDX = 5;
+const mkUTC = d => Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
+const wd = ms => new Date(ms).getUTCDay();
+const isBoundary = ms => wd(ms)===0 || wd(ms)===3;
+function periodStart(ms){ let t=ms; while(!isBoundary(t)) t-=DAY; return t; }
+function nextBoundary(ms){ let t=ms+DAY; while(!isBoundary(t)) t+=DAY; return t; }
+function periodCounter(ms){
+  let t=periodStart(Date.UTC(2025,0,1)), ps=periodStart(ms), c=0;
+  while(t<=ps){ c++; t=nextBoundary(t); }
+  return c;
+}
+const BASE = periodCounter(ANCHOR);
+function statusFor(ms){
+  const newIdx = ((ANCHOR_IDX + (periodCounter(ms)-BASE)) % 6 + 6) % 6;
+  const list = ORDER.map((c,i)=>{
+    const age = ((newIdx - i) % 6 + 6) % 6;
+    let kind;
+    if      (age === 0) kind = "new";
+    else if (age === 1) kind = "full";
+    else if (age === 2) kind = "25";
+    else if (age <= 4)  kind = "50";
+    else                kind = "75";
+    return {color:c, age, kind};
+  });
+  return {newIdx, list};
+}
+const fmt = ms => new Date(ms).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"});
+const fmtShort = ms => new Date(ms).toLocaleDateString("tr-TR",{day:"numeric",month:"long",timeZone:"UTC"});
+function badge(kind){
+  if(kind==="new")  return '<span class="badge b-new">🆕 YENİ · tam fiyat</span>';
+  if(kind==="full") return '<span class="badge b-full">Tam fiyat</span>';
+  if(kind==="25")   return '<span class="badge b-25">%25 indirim</span>';
+  if(kind==="50")   return '<span class="badge b-50">%50 indirim</span>';
+  return '<span class="badge b-75">%75 · son şans</span>';
+}
+function render(ms){
+  const ps = periodStart(ms), pe = nextBoundary(ms) - DAY;
+  const {list} = statusFor(ms);
+  const sorted = [...list].sort((a,b)=>a.age-b.age);
+  document.getElementById("period").innerHTML =
+    `Dönem: <b>${fmtShort(ps)} – ${fmtShort(pe)}</b><br>Sıradaki değişim: <b>${fmt(nextBoundary(ms))}</b>`;
+  document.getElementById("grid").innerHTML = sorted.map(it=>`
+    <div class="row ${it.kind==='new'?'isnew':''}">
+      <div class="sw" style="background:${HEX[it.color]}"></div>
+      <div class="name">${EMOJI[it.color]} ${TR[it.color]}<span class="en">${it.color}</span></div>
+      ${badge(it.kind)}
+    </div>`).join("");
+  const nb = nextBoundary(ms);
+  const {newIdx:nn} = statusFor(nb);
+  document.getElementById("next").innerHTML =
+    `➡️ <b>${fmt(nb)}</b> günü yeni renk: <b>${EMOJI[ORDER[nn]]} ${TR[ORDER[nn]]}</b> olacak.`;
+}
+const dt = document.getElementById("dt");
+function setDate(ms){ dt.value = new Date(ms).toISOString().slice(0,10); render(ms); }
+dt.addEventListener("change", ()=>{
+  const [y,m,d] = dt.value.split("-").map(Number);
+  render(Date.UTC(y,m-1,d));
+});
+document.getElementById("today").addEventListener("click", ()=> setDate(mkUTC(new Date())));
+setDate(mkUTC(new Date()));
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
