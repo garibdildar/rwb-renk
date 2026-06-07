@@ -1,5 +1,5 @@
 // RWB Renk Takibi - basit offline cache
-const CACHE = "rwb-renk-v1";
+const CACHE = "rwb-renk-v2";
 const ASSETS = [
   "./",
   "./index.html",
